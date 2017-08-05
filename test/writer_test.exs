@@ -5,8 +5,9 @@ defmodule EventStore.WriterTest do
   alias EventStore
   alias EventStore.{EventFactory,ProcessHelper,Wait}
 
+  @tag :wip
   test "restart writer, should assign next event id on append to stream" do
-    stream_uuid = UUID.uuid4
+    stream_uuid = UUID.uuid4()
 
     :ok = EventStore.append_to_stream(stream_uuid, 0, EventFactory.create_events(1))
 

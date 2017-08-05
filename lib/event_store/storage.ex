@@ -51,13 +51,6 @@ defmodule EventStore.Storage do
   end
 
   @doc """
-  Get the id of the last event persisted to storage
-  """
-  def latest_event_id do
-    execute_using_storage_pool(&Stream.latest_event_id/1)
-  end
-
-  @doc """
   Get the id and version of the stream with the given uuid
   """
   def stream_info(stream_uuid) do

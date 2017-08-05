@@ -56,7 +56,7 @@ defmodule EventStore.Subscriptions.AllStreamsSubscriptionTest do
     stream_uuid = UUID.uuid4
     {:ok, stream_id} = Stream.create_stream(conn, stream_uuid)
     recorded_events = EventFactory.create_recorded_events(3, stream_id)
-    {:ok, 3} = Appender.append(conn, stream_id, recorded_events)
+    {:ok, [1, 2, 3]} = Appender.append(conn, recorded_events)
 
     subscription =
       create_subscription()
@@ -145,7 +145,7 @@ defmodule EventStore.Subscriptions.AllStreamsSubscriptionTest do
     def append_events_to_stream(%{conn: conn}) do
       stream_uuid = UUID.uuid4
       {:ok, stream_id} = Stream.create_stream(conn, stream_uuid)
-      {:ok, 3} = Appender.append(conn, stream_id, EventFactory.create_recorded_events(3, stream_id))
+      {:ok, [1, 2, 3]} = Appender.append(conn, EventFactory.create_recorded_events(3, stream_id))
 
       []
     end

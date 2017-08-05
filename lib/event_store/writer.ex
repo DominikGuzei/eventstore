@@ -7,11 +7,10 @@ defmodule EventStore.Writer do
   require Logger
 
   alias EventStore.{Subscriptions,RecordedEvent,Writer}
-  alias EventStore.Storage.{Appender,QueryLatestEventId}
+  alias EventStore.Storage.{Appender}
 
   defstruct [
     conn: nil,
-    next_event_id: 1,
     serializer: nil,
   ]
 
@@ -24,54 +23,45 @@ defmodule EventStore.Writer do
 
     {:ok, conn} = Postgrex.start_link(storage_config)
 
-    GenServer.cast(self(), {:latest_event_id})
-
     {:ok, %Writer{state | conn: conn}}
   end
 
   @doc """
   Append the given list of events to the stream
   """
-  def append_to_stream(events, stream_id, stream_uuid)
-  def append_to_stream([], _stream_id, _stream_uuid), do: :ok
-  def append_to_stream(events, stream_id, stream_uuid) do
-    GenServer.call(__MODULE__, {:append_to_stream, events, stream_id, stream_uuid})
+  @spec append_to_stream(list(RecordedEvent.t), String.t) :: :ok | {:error, reason :: any()}
+  def append_to_stream(events, stream_uuid)
+  def append_to_stream([], _stream_uuid), do: :ok
+  def append_to_stream(events, stream_uuid) do
+    GenServer.call(__MODULE__, {:append_to_stream, events, stream_uuid})
   end
 
-  def handle_call({:append_to_stream, events, stream_id, stream_uuid}, _from, %Writer{conn: conn, next_event_id: next_event_id, serializer: serializer} = state) do
-    recorded_events = assign_event_id(events, next_event_id)
+  def handle_call({:append_to_stream, events, stream_uuid}, _from, %Writer{conn: conn, serializer: serializer} = state) do
+    {reply, state} = case append_events(conn, events) do
+      {:ok, assigned_event_ids} ->
+        events
+        |> assign_event_ids(assigned_event_ids)
+        |> publish_events(stream_uuid, serializer)
 
-    {reply, state} = case append_events(conn, stream_id, recorded_events) do
-      {:ok, count} ->
-        publish_events(stream_uuid, recorded_events, serializer)
-        {:ok, %Writer{state | next_event_id: next_event_id + count}}
+        {:ok, state}
+
       {:error, _reason} = reply -> {reply, state}
     end
 
     {:reply, reply, state}
   end
 
-  def handle_cast({:latest_event_id}, %Writer{conn: conn} = state) do
-    {:ok, last_event_id} = QueryLatestEventId.execute(conn)
-
-    {:noreply, %Writer{state | next_event_id: last_event_id + 1}}
-  end
-
-  defp assign_event_id(events, next_event_id) do
+  defp append_events(conn, events), do: Appender.append(conn, events)
+  
+  defp assign_event_ids(events, ids) do
     events
-    |> Enum.with_index(0)
-    |> Enum.map(fn {recorded_event, index} ->
-      %RecordedEvent{recorded_event |
-        event_id: next_event_id + index
-      }
+    |> Enum.zip(ids)
+    |> Enum.map(fn {event, id} ->
+      %RecordedEvent{event | event_id: id}
     end)
   end
 
-  defp append_events(conn, stream_id, recorded_events) do
-    Appender.append(conn, stream_id, recorded_events)
-  end
-
-  defp publish_events(stream_uuid, recorded_events, serializer) do
-    Subscriptions.notify_events(stream_uuid, recorded_events, serializer)
+  defp publish_events(events, stream_uuid, serializer) do
+    Subscriptions.notify_events(stream_uuid, events, serializer)
   end
 end
