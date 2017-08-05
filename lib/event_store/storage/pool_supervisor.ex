@@ -1,8 +1,6 @@
 defmodule EventStore.Storage.PoolSupervisor do
   use Supervisor
 
-  alias EventStore.Config
-
   @storage_pool_name :event_store_storage_pool
 
   @defaults [
@@ -12,13 +10,11 @@ defmodule EventStore.Storage.PoolSupervisor do
     {:max_overflow, 5}
   ]
 
-  def start_link do
-    Supervisor.start_link(__MODULE__, nil)
+  def start_link(config) do
+    Supervisor.start_link(__MODULE__, [config])
   end
 
-  def init(_) do
-    config = EventStore.configuration() |> Config.parse()
-
+  def init([config]) do
     children = [
       :poolboy.child_spec(@storage_pool_name, pool_opts(config), postgrex_opts(config))
     ]
