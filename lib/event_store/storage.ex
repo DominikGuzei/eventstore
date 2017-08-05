@@ -10,7 +10,7 @@ defmodule EventStore.Storage do
 
   alias EventStore.Snapshots.SnapshotData
   alias EventStore.Storage
-  alias EventStore.Storage.{Reader,Snapshot,Stream,Subscription}
+  alias EventStore.Storage.{Appender,Reader,Snapshot,Stream,Subscription}
 
   @storage_pool_name :event_store_storage_pool
 
@@ -34,6 +34,13 @@ defmodule EventStore.Storage do
   """
   def create_stream(stream_uuid) do
     execute_using_storage_pool(&Stream.create_stream(&1, stream_uuid))
+  end
+
+  @doc """
+  Append the given list of recorded events to storage
+  """
+  def append_to_stream(events) do
+    execute_using_storage_pool(&Appender.append(&1, events))
   end
 
   @doc """

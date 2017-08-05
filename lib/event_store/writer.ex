@@ -3,56 +3,30 @@ defmodule EventStore.Writer do
   Single process writer to assign a monotonically increasing id and persist events to the store
   """
 
-  use GenServer
-  require Logger
-
-  alias EventStore.{Subscriptions,RecordedEvent,Writer}
-  alias EventStore.Storage.{Appender}
-
-  defstruct [
-    conn: nil,
-    serializer: nil,
-  ]
-
-  def start_link(serializer) do
-    GenServer.start_link(__MODULE__, %Writer{serializer: serializer}, name: __MODULE__)
-  end
-
-  def init(%Writer{} = state) do
-    storage_config = EventStore.configuration() |> EventStore.Config.parse()
-
-    {:ok, conn} = Postgrex.start_link(storage_config)
-
-    {:ok, %Writer{state | conn: conn}}
-  end
+  alias EventStore.{Subscriptions,RecordedEvent}
+  alias EventStore.Storage
 
   @doc """
-  Append the given list of events to the stream
-  """
-  @spec append_to_stream(list(RecordedEvent.t), String.t) :: :ok | {:error, reason :: any()}
-  def append_to_stream(events, stream_uuid)
-  def append_to_stream([], _stream_uuid), do: :ok
-  def append_to_stream(events, stream_uuid) do
-    GenServer.call(__MODULE__, {:append_to_stream, events, stream_uuid})
-  end
+  Append the given list of recorded events to the stream
 
-  def handle_call({:append_to_stream, events, stream_uuid}, _from, %Writer{conn: conn, serializer: serializer} = state) do
-    {reply, state} = case append_events(conn, events) do
+  Returns `:ok` on success, or `{:error, reason}` on failure
+  """
+  @spec append_to_stream(list(RecordedEvent.t), String.t, EventStore.Serializer.t) :: :ok | {:error, reason :: any()}
+  def append_to_stream(events, stream_uuid, serializer)
+  def append_to_stream([], _stream_uuid, _serializer), do: :ok
+  def append_to_stream(events, stream_uuid, serializer) do
+    case Storage.append_to_stream(events) do
       {:ok, assigned_event_ids} ->
         events
         |> assign_event_ids(assigned_event_ids)
         |> publish_events(stream_uuid, serializer)
 
-        {:ok, state}
+        :ok
 
-      {:error, _reason} = reply -> {reply, state}
+      {:error, _reason} = reply -> reply
     end
-
-    {:reply, reply, state}
   end
 
-  defp append_events(conn, events), do: Appender.append(conn, events)
-  
   defp assign_event_ids(events, ids) do
     events
     |> Enum.zip(ids)
